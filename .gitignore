@@ -1,0 +1,13 @@
+*.exe
+*.o
+*.bin
+*.elf
+
+*.log
+
+bin
+int
+
+env.sh
+
+.vscode
