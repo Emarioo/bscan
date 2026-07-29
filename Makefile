@@ -28,6 +28,8 @@ ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 CC := gcc
 
 CFLAGS := -g $(OFLAG)
+# Turning off optimizations for debugging
+CFLAGS += -O0
 CFLAGS += -I$(ROOT)/include -I$(ROOT)/src
 CFLAGS += -Wall -Werror -fshort-wchar -Werror=implicit-function-declaration
 CFLAGS += -Wno-multichar

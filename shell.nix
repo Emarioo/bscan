@@ -2,12 +2,13 @@
 { pkgs ? import <nixpkgs> {} }:
 
 pkgs.mkShell {
+  hardeningDisable = [ "fortify" ];
+
   buildInputs = with pkgs; [
     gcc
     python3
     gnumake
 
-    opencv
     raylib
     libx11
     glfw
