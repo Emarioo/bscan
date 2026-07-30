@@ -159,7 +159,7 @@ void camera_update(CameraContext* context) {
         Two pixels = 4 bytes
     */
 
-    printf("Frame size: %d bytes\n", buf.bytesused);
+    // printf("Frame size: %d bytes\n", buf.bytesused);
 
 
     // Return buffer

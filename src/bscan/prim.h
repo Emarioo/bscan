@@ -16,6 +16,7 @@
 typedef uint8_t  byte;
 typedef uint32_t word;
 #define PIXEL_SIZE 4
+#define FLOAT_PIXEL_SIZE 12
 
 
 typedef struct {
@@ -24,6 +25,15 @@ typedef struct {
     int   h;
 } Buffer;
 
+typedef struct {
+    float r,g,b;
+} FloatPixel;
+
+typedef struct {
+    FloatPixel* pixels;
+    int   w;
+    int   h;
+} FloatBuffer;
 
 
 typedef struct {
