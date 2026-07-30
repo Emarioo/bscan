@@ -15,7 +15,8 @@ void render_update(RenderContext* render);
 void render_cleanup(RenderContext* render);
 
 Buffer make_buffer(BScanContext* context);
-
+Point* make_point(BScanContext* context, int x, int y);
+Edge* make_edge(BScanContext* context, Point* a, Point* b);
 
 #define ENCODE_RGB(W,R,G,B) W = ((word)(R)) | ((word)(G) << 8) | ((word)(B) << 16) | 0xFF000000;
 #define DECODE_RGB(W,R,G,B) ( R = ((W)) & 0xFF, G = ((W) >> 8) & 0xFF, B = ((W) >> 16) & 0xFF )
@@ -126,7 +127,7 @@ void blur(Buffer dst_buf, Buffer src_buf) {
 }
 
 
-void gaus(Buffer dst_buf, Buffer src_buf) {
+void gaus5x5(Buffer dst_buf, Buffer src_buf) {
 
     word* dst = dst_buf.pixels;
     word* src = src_buf.pixels;
@@ -146,30 +147,37 @@ void gaus(Buffer dst_buf, Buffer src_buf) {
                 sG += G*WEIGHT; \
                 sB += B*WEIGHT; 
 
-            // GAUS_SUM(-1,-1, 1)
-            // GAUS_SUM(0, -1, 2)
-            // GAUS_SUM(1, -1, 1)
-            // GAUS_SUM(-1, 0, 2)
-            // GAUS_SUM(0,  0, 4)
-            // GAUS_SUM(1,  0, 2)
-            // GAUS_SUM(-1, 1, 1)
-            // GAUS_SUM(0,  1, 2)
-            // GAUS_SUM(1,  1, 1)
+            GAUS_SUM(-2, -2, 1)
+            GAUS_SUM(-1, -2, 4)
+            GAUS_SUM( 0, -2, 7)
+            GAUS_SUM(-1, -2, 4)
+            GAUS_SUM(-2, -2, 1)
 
-            GAUS_SUM(-1,-1, 1)
-            GAUS_SUM(0,-1, 4)
-            GAUS_SUM(1,-1, 1)
+            GAUS_SUM(-2, -1, 4)
+            GAUS_SUM(-1, -1, 16)
+            GAUS_SUM( 0, -1, 26)
+            GAUS_SUM(-1, -1, 16)
+            GAUS_SUM(-2, -1, 4)
 
-            GAUS_SUM(-1,0, 4)
-            GAUS_SUM(0,0,16)
-            GAUS_SUM(1,0,4)
+            GAUS_SUM(-2, 0, 7)
+            GAUS_SUM(-1, 0, 26)
+            GAUS_SUM( 0, 0, 41)
+            GAUS_SUM(-1, 0, 26)
+            GAUS_SUM(-2, 0, 7)
 
-            GAUS_SUM(-1,1,1)
-            GAUS_SUM(0,1,4)
-            GAUS_SUM(1,1,1)
+            GAUS_SUM(-2, -1, 4)
+            GAUS_SUM(-1, -1, 16)
+            GAUS_SUM( 0, -1, 26)
+            GAUS_SUM(-1, -1, 16)
+            GAUS_SUM(-2, -1, 4)
 
-            int weight = 36;
-            // int weight = 16;
+            GAUS_SUM(-2, -2, 1)
+            GAUS_SUM(-1, -2, 4)
+            GAUS_SUM( 0, -2, 7)
+            GAUS_SUM(-1, -2, 4)
+            GAUS_SUM(-2, -2, 1)
+
+            int weight = 273;
 
             ENCODE_RGB(W, sR/weight, sG/weight, sB/weight);
 
@@ -177,6 +185,49 @@ void gaus(Buffer dst_buf, Buffer src_buf) {
         }
     }
 }
+
+void gaus3x3(Buffer dst_buf, Buffer src_buf) {
+
+    word* dst = dst_buf.pixels;
+    word* src = src_buf.pixels;
+    int pw = src_buf.w;
+    int ph = src_buf.h;
+
+    for (int y = 0; y < ph; y++) {
+        for (int x = 0; x < pw; x++) {
+            word W;
+            int sR = 0, sG = 0, sB = 0;
+            int R,G,B;
+
+            #define GAUS_SUM(SX,SY,WEIGHT) \
+                W = src[(x + SX) + (y+SY) * pw]; \
+                DECODE_RGB(W, R, G, B); \
+                sR += R*WEIGHT; \
+                sG += G*WEIGHT; \
+                sB += B*WEIGHT; 
+
+            GAUS_SUM(-1, -1, 1)
+            GAUS_SUM( 0, -1, 2)
+            GAUS_SUM( 1, -1, 1)
+
+            GAUS_SUM(-1, 0, 2)
+            GAUS_SUM( 0, 0, 4)
+            GAUS_SUM( 1, 0, 2)
+
+            GAUS_SUM(-1, 1, 1)
+            GAUS_SUM( 0, 1, 2)
+            GAUS_SUM( 1, 1, 1)
+
+            int weight = 16;
+
+            ENCODE_RGB(W, sR/weight, sG/weight, sB/weight);
+
+            dst[x + y * pw] = W;
+        }
+    }
+}
+#define THRESHOLD 50
+
 
 void edge(Buffer dst_buf, Buffer src_buf) {
 
@@ -221,20 +272,215 @@ void edge(Buffer dst_buf, Buffer src_buf) {
             CALC(1,  1)
             // CALC(2,  2)
 
+            int value = sumDiff;
+
             // dst[x + y * pw] = CLAMP(sumDiff);
-            dst[x + y * pw] = sumDiff;
             // dst[x + y * pw] = sumDiff < ABS(sumTotal) ? 0 : sumDiff;
             // dst[x + y * pw] = ABS(sumTotal);
             // dst[x + y * pw] = sInt;
             // dst[x + y * pw] = (((sumDiff & 0xFF) << 16)) + sW;
+
+
+            // strength = BRIGHTNESS;
+
+            // if (value > THRESHOLD)
+            //     value = 0xFF00 | value;
+                // value = 0x0000FF00;
+
+            dst[x + y * pw] = value;
         }
+    }
+}
+
+
+void point_sum(BScanContext* context, Buffer src_buf) {
+
+    word* src = src_buf.pixels;
+    int pw = src_buf.w;
+    int ph = src_buf.h;
+
+
+    for (int y = 0; y < ph; y++) {
+        for (int x = 0; x < pw; x++) {
+            word W;
+            int R,G,B;
+            int strength;
+            W = src[x + y * pw];
+            DECODE_RGB(W, R,G,B);
+            strength = R;
+            // strength = BRIGHTNESS;
+
+            if (strength < THRESHOLD)
+                continue;
+
+            make_point(context, x, y);
+        }
+    }
+}
+
+
+void point_reduce(BScanContext* context) {
+
+    int newPointLen = 0;
+    Graph* graph = context->graph;
+
+    const int threshold = 5;
+
+    for (int pi=0;pi<graph->points_len;pi++) {
+        Point* a = &graph->points[pi];
+
+        bool anyClose = false;
+        for (int i=pi+1;i<graph->points_len;i++) {
+            Point* b = &graph->points[i];
+
+            int dx = a->x - b->x;
+            int dy = a->y - b->y;
+
+            int dist = dx*dx + dy*dy;
+            if (dist < threshold) {
+                anyClose = true;
+                break;
+            }
+        }
+        
+        if (!anyClose) {
+            Point* dst = &graph->points[newPointLen];
+            *dst = *a;
+            newPointLen++;
+        }
+        
+    }
+
+    graph->points_len = newPointLen;
+}
+
+
+void edge_sum(BScanContext* context) {
+
+    Graph* graph = context->graph;
+
+    const int threshold = 5;
+
+    for (int pi=0;pi<graph->points_len;pi++) {
+        Point* a = &graph->points[pi];
+        Point* closest = NULL;
+        int closestDist = 9999;
+
+        for (int i=pi+1;i<graph->points_len;i++) {
+            Point* b = &graph->points[i];
+
+            int dx = a->x - b->x;
+            int dy = a->y - b->y;
+            int dist = dx*dx + dy*dy;
+
+            if (dist < closestDist && dist < 40*40) {
+                closestDist = dist;
+                closest = b;
+            }
+        }
+
+        if (closest)
+            make_edge(context, a, closest);
+    }
+}
+
+
+void prepare_skeleton(Skeleton* skel) {
+    
+    skel->bones_len = BONE_COUNT;
+
+
+    // Center bones
+
+    skel->bones[BONE_TORSO] = (Bone){
+        .parent = 0,
+        .localPos = (Vector3){0, 0.9f, 0},
+        .localRot = QuaternionIdentity(),
+    };
+
+    skel->bones[BONE_HEAD] = (Bone){
+        .parent = BONE_TORSO,
+        .localPos = (Vector3){0, 0.24f, 0},
+        .localRot = QuaternionIdentity(),
+    };
+
+    // Left bones
+
+    skel->bones[BONE_LEFT_SHOULDER] = (Bone){
+        .parent = BONE_TORSO,
+        .localPos = {-0.25f, 0.05f, 0},
+        .localRot = QuaternionIdentity(),
+    };
+
+    skel->bones[BONE_LEFT_ARM] = (Bone){
+        .parent = BONE_LEFT_SHOULDER,
+        .localPos = {0, -0.30f, 0},
+        .localRot = QuaternionIdentity(),
+    };
+    skel->bones[BONE_LEFT_WRIST] = (Bone){
+        .parent = BONE_LEFT_ARM,
+        .localPos = {0, -0.30f, 0},
+        .localRot = QuaternionIdentity(),
+    };
+
+    skel->bones[BONE_LEFT_HIP] = (Bone){
+        .parent = BONE_TORSO,
+        .localPos = {-0.15, -0.53f, 0},
+        .localRot = QuaternionIdentity(),
+    };
+
+    skel->bones[BONE_LEFT_KNEE] = (Bone){
+        .parent = BONE_LEFT_HIP,
+        .localPos = {0, -0.3f, 0},
+        .localRot = QuaternionIdentity(),
+    };
+
+    skel->bones[BONE_LEFT_ANKLE] = (Bone){
+        .parent = BONE_LEFT_KNEE,
+        .localPos = {0, -0.3f, 0.0},
+        .localRot = QuaternionIdentity(),
+    };
+
+    // Right bones
+
+    int leftToRightStride = BONE_RIGHT_SHOULDER - BONE_LEFT_SHOULDER;
+    for (int i = 0; i < leftToRightStride; i++) {
+        Bone* left = &skel->bones[BONE_LEFT_SHOULDER + i];
+        Bone* right = &skel->bones[BONE_RIGHT_SHOULDER + i];
+        *right = *left;
+        if (right->parent >= BONE_LEFT_SHOULDER)
+            right->parent += leftToRightStride;
+        right->localPos.x = -right->localPos.x;
+        right->localRot.x = -right->localRot.x;
+    }
+}
+
+void compute_skeleton(Skeleton* skel) {
+
+    for (int i=0;i<skel->bones_len;i++) {
+        Bone* bone = &skel->bones[i];
+        Bone* parent = i == 0 ? NULL : &skel->bones[bone->parent];
+
+        if (!parent) {
+            bone->worldRot = bone->localRot;
+            bone->worldPos = bone->localPos;
+            continue;
+        }
+
+        Vector3 offset = Vector3RotateByQuaternion(bone->localPos, parent->worldRot);
+        bone->worldPos = Vector3Add(parent->worldPos, offset);
+        bone->worldRot = QuaternionMultiply(parent->worldRot, bone->localRot);
     }
 }
 
 void bscan_loop(BScanContext* context) {
 
-    CameraContext* camera = context->camera = calloc(1, sizeof(CameraContext));
-    RenderContext* render = context->render = calloc(1, sizeof(RenderContext));
+    CameraContext* camera   = context->camera   = calloc(1, sizeof(CameraContext));
+    RenderContext* render   = context->render   = calloc(1, sizeof(RenderContext));
+    Graph*         graph    = context->graph    = calloc(1, sizeof(Graph));
+    Skeleton*      skeleton = context->skeleton = calloc(1, sizeof(Skeleton));
+
+    prepare_skeleton(skeleton);
 
     camera_init(context->camera);
 
@@ -254,9 +500,24 @@ void bscan_loop(BScanContext* context) {
 
     render->texture = LoadTextureFromImage(img);
 
+    graph->edges_cap = 100000;
+    graph->edges = malloc(graph->edges_cap * sizeof(Edge));
+    graph->points_cap = 100000;
+    graph->points = malloc(graph->points_cap * sizeof(Point));
 
 
-    while (!context->render->shouldClose) {
+    // Camera raycam = { { 0.0f, 10.0f, 10.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, 45.0f, 0 };
+    Camera raycam = { 0 };
+    raycam.position = (Vector3){ 0.0f, 1.2f, -5.0f };    // Camera position
+    // raycam.target = (Vector3){ 0.185f, 0.4f, 0.0f };    // Camera looking at point
+    raycam.up = (Vector3){ 0.0f, 1.0f, 0.0f };          // Camera up vector (rotation towards target)
+    raycam.fovy = 45.0f;                                // Camera field-of-view Y
+    raycam.projection = CAMERA_PERSPECTIVE;             // Camera projection type
+
+    DisableCursor();                // Limit cursor to relative movement inside the window
+
+
+    while (!WindowShouldClose()) {
         
         camera_update(context->camera);
 
@@ -270,13 +531,83 @@ void bscan_loop(BScanContext* context) {
 
         PIPE_START(yuv_to_rgb, camera->output)
         // PIPE(grayscale)
-        PIPE(blur)
-        // PIPE(gaus)
+        // PIPE(blur)
+        // PIPE(gaus3x3)
+        // PIPE(gaus5x5)
         PIPE(edge)
+
+
+        graph->points_len = 0;
+        graph->edges_len = 0;
+
+        point_sum(context, src);
+
+        point_reduce(context);
+
+        edge_sum(context);
+
+        printf("%d\n", graph->points_len);
 
         render->target = src;
 
-        render_update(context->render);   
+
+        UpdateCamera(&raycam, CAMERA_FREE);
+
+        BeginDrawing();
+
+        ClearBackground(RAYWHITE);
+
+        rlDisableColorBlend();
+        
+
+        UpdateTexture(render->texture, render->target.pixels);
+
+            
+        // @TODO Upscaled frame buffer.
+        DrawTexture(render->texture, 0, 0, WHITE);
+
+
+        for (int i=0;i<graph->points_len;i++) {
+            Point* p = &graph->points[i];
+            DrawPixel(p->x, p->y, WHITE);
+        }
+
+
+        for (int i=0;i<graph->edges_len;i++) {
+            Point* a = graph->edges[i].a;
+            Point* b = graph->edges[i].b;
+            DrawLine(a->x, a->y, b->x, b->y, PURPLE);
+        }
+
+        compute_skeleton(skeleton);
+        
+        BeginMode3D(raycam);
+
+            // DrawCube((Vector3){0,0,0}, 1, 1, 1, WHITE);
+
+            DrawGrid(10, 1.0f);        // Draw a grid
+
+            for (int i = 0; i < skeleton->bones_len; i++) {
+                Bone* b = &skeleton->bones[i];
+
+                DrawSphere(b->worldPos, 0.03f, RED);
+
+                if (i == 0)
+                    continue;
+
+                Bone* p = &skeleton->bones[b->parent];
+
+                DrawLine3D(
+                    p->worldPos,
+                    b->worldPos,
+                    BLUE);
+            }
+
+
+        EndMode3D();
+            
+
+        EndDrawing();
 
     }
 
@@ -329,8 +660,23 @@ Buffer make_buffer(BScanContext* context) {
     RenderContext* render = context->render;
     int w = context->camera->output.w;
     int h = context->camera->output.h;
+    int extra_padding = 2;
     Buffer buffer = { .w = w, .h = h };
-    buffer.pixels = malloc(w * (h + 3) * PIXEL_SIZE);
-    buffer.pixels += w + 20;
+    buffer.pixels = malloc(w * (h + 2*extra_padding) * PIXEL_SIZE);
+    buffer.pixels += extra_padding * w + 20;
     return buffer;
+}
+
+
+Point* make_point(BScanContext* context, int x, int y) {
+    Point* p = &context->graph->points[context->graph->points_len++];
+    p->x = x;
+    p->y = y;
+    return p;
+}
+Edge* make_edge(BScanContext* context, Point* a, Point* b) {
+    Edge* edge = &context->graph->edges[context->graph->edges_len++];
+    edge->a = a;
+    edge->b = b;
+    return edge;
 }

@@ -23,6 +23,11 @@ typedef struct {
 typedef struct {
     CameraContext* camera;
     RenderContext* render;
+
+    Graph* graph;
+    
+    Skeleton* skeleton;
+
 } BScanContext;
 
 

@@ -1,7 +1,7 @@
 
 Experimenting with processing of camera data.
 
-![](docs/img/edges.png)
+![](docs/img/base_skeleton.png)
 
 ```bash
 nix-shell
