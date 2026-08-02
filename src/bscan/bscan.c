@@ -122,6 +122,7 @@ Edge* make_edge(BScanContext* context, Point* a, Point* b);
 #define DECODE_RGB(W,R,G,B) ( R = ((W)) & 0xFF, G = ((W) >> 8) & 0xFF, B = ((W) >> 16) & 0xFF )
 
 #define BRIGHTNESS (0.2126*R + 0.7152*G + 0.0722*B)
+#define BRIGHTNESS2(R,G,B) (0.2126*R + 0.7152*G + 0.0722*B)
 
 
 void yuv_to_rgb(Buffer dst_buf, Buffer src_buf) {
@@ -537,8 +538,39 @@ void subtract(Buffer dst_buf, FloatBuffer src_buf) {
     int pw = src_buf.w;
     int ph = src_buf.h;
 
-    float saturateFactor = 2.0f;
-    // float contrast = 1.f;
+    for (int y = 0; y < ph; y++) {
+        for (int x = 0; x < pw; x++) {
+            word W;
+            int R,G,B;
+            float sR, sG, sB;
+
+            FloatPixel* fp = &src[x + y * pw];
+            sR = fp->r;
+            sG = fp->g;
+            sB = fp->b;
+
+            W = dst[x + y * pw];
+            DECODE_RGB(W, R, G, B);
+
+            int diff = ABS(R - sR) + ABS(G - sG) + ABS(B - sB);
+            if (diff < 80) {
+                R = 0;
+                G = 0;
+                B = 0;
+            }
+
+            ENCODE_RGB(W, R, G, B);
+            dst[x + y * pw] = W;
+
+        }
+    }
+}
+
+void dim_subtract(Buffer dst_buf, FloatBuffer src_buf) {
+    word* dst = dst_buf.pixels;
+    FloatPixel* src = src_buf.pixels;
+    int pw = src_buf.w;
+    int ph = src_buf.h;
 
     for (int y = 0; y < ph; y++) {
         for (int x = 0; x < pw; x++) {
@@ -555,10 +587,20 @@ void subtract(Buffer dst_buf, FloatBuffer src_buf) {
             W = dst[x + y * pw];
             DECODE_RGB(W, R, G, B);
 
-            fp->r = CLAMP(sR * 0.8 + R * 0.2);
-            fp->g = CLAMP(sG * 0.8 + G * 0.2);
-            fp->b = CLAMP(sB * 0.8 + B * 0.2);
 
+            // int diff = ABS(sR - R) + ABS(sG - G) + ABS(sB - B);
+            fp->r = CLAMP(sR * 0.9 + R * 0.1);
+            fp->g = CLAMP(sG * 0.9 + G * 0.1);
+            fp->b = CLAMP(sB * 0.9 + B * 0.1);
+            // if (diff > 260) {
+            //     fp->r = 0.0f;
+            //     fp->g = 0.0f;
+            //     fp->b = 0.0f;
+            // }
+
+            // R = diff;
+            // G = 0;
+            // B = 0;
 
             R = CLAMP(R - sR);
             G = CLAMP(G - sG);
@@ -571,6 +613,29 @@ void subtract(Buffer dst_buf, FloatBuffer src_buf) {
             ENCODE_RGB(W, R, G, B);
             dst[x + y * pw] = W;
 
+        }
+    }
+}
+
+
+void update_background(FloatBuffer dst_buf, Buffer src_buf) {
+    FloatPixel* dst = dst_buf.pixels;
+    word* src = src_buf.pixels;
+    int pw = src_buf.w;
+    int ph = src_buf.h;
+
+    for (int y = 0; y < ph; y++) {
+        for (int x = 0; x < pw; x++) {
+            word W;
+            int R,G,B;
+
+            W = src[x + y * pw];
+            DECODE_RGB(W, R, G, B);
+
+            FloatPixel* fp = &dst[x + y * pw];
+            fp->r = R;
+            fp->g = G;
+            fp->b = B;
         }
     }
 }
@@ -747,6 +812,7 @@ Vector2 detect_center(BScanContext* context) {
 
     int count = graph->points_len;
 
+    // We may make a huge stack here
     int xs[count];
     int ys[count];
 
@@ -773,6 +839,49 @@ Vector2 detect_center(BScanContext* context) {
     return center;
 }
 
+
+Vector2 detect_head(BScanContext* context, Vector2 center) {
+    Graph* graph = context->graph;
+
+    if (graph->points_len == 0)
+        return (Vector2){0, 0};
+
+    int count = graph->points_len;
+
+    int xs[count];
+    int ys[count];
+
+    int finalLength = 0;
+
+    const int neckHeight = 60; // If person is far away then this needs to be smaller.
+    for (int i = 0; i < count; i++) {
+        if (graph->points[i].y > center.y - neckHeight) {
+            continue;
+        }
+        xs[finalLength] = graph->points[i].x;
+        ys[finalLength] = graph->points[i].y;
+        finalLength++;
+    }
+
+    qsort(xs, finalLength, sizeof(int), compare_int);
+    qsort(ys, finalLength, sizeof(int), compare_int);
+
+    Vector2 output;
+
+    if (finalLength & 1) {
+        // Odd number of points
+        output.x = xs[finalLength / 2];
+        output.y = ys[finalLength / 2];
+    } else {
+        // Even number of points
+        output.x = (xs[finalLength / 2 - 1] + xs[finalLength / 2]) / 2.0f;
+        output.y = (ys[finalLength / 2 - 1] + ys[finalLength / 2]) / 2.0f;
+    }
+
+    return output;
+}
+
+
 float scatter_score(BScanContext* context, Vector2 center) {
     Graph* graph = context->graph;
 
@@ -785,6 +894,8 @@ float scatter_score(BScanContext* context, Vector2 center) {
         variance += dx*dx + dy*dy;
     }
 
+    if (graph->points_len <= 0)
+        return 0;
     return variance / graph->points_len;
 }
 
@@ -918,6 +1029,12 @@ void compute_skeleton(Skeleton* skel) {
         Vector3 offset = Vector3RotateByQuaternion(bone->localPos, parent->worldRot);
         bone->worldPos = Vector3Add(parent->worldPos, offset);
         bone->worldRot = QuaternionMultiply(parent->worldRot, bone->localRot);
+
+        if (i == BONE_HEAD) {
+            bone->worldRot = QuaternionIdentity();
+            bone->worldPos = bone->localPos;
+            bone->worldPos.y += 0.9f;
+        }
     }
 }
 
@@ -950,23 +1067,26 @@ void bscan_loop(BScanContext* context) {
 
     graph->edges_cap = 100000;
     graph->edges = malloc(graph->edges_cap * sizeof(Edge));
-    graph->points_cap = 100000;
+    graph->points_cap = 5000;
     graph->points = malloc(graph->points_cap * sizeof(Point));
 
 
     // Camera raycam = { { 0.0f, 10.0f, 10.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, 45.0f, 0 };
     Camera raycam = { 0 };
-    raycam.position = (Vector3){ 0.0f, 1.2f, -5.0f };    // Camera position
-    // raycam.target = (Vector3){ 0.185f, 0.4f, 0.0f };    // Camera looking at point
+    raycam.position = (Vector3){ 0.0f, 1.4f, 7.0f };    // Camera position
+    raycam.target = (Vector3){ 0.0, 0.5f, 0 };    // Camera looking at point
     raycam.up = (Vector3){ 0.0f, 1.0f, 0.0f };          // Camera up vector (rotation towards target)
     raycam.fovy = 45.0f;                                // Camera field-of-view Y
     raycam.projection = CAMERA_PERSPECTIVE;             // Camera projection type
 
     DisableCursor();                // Limit cursor to relative movement inside the window
 
-    FloatBuffer prev = make_float_buffer(context);
+    FloatBuffer backgroundImage = make_float_buffer(context);
 
     Vector2 previousCenter = {0};
+    Vector2 previousHead = {0};
+
+    bool hasBackground = false;
 
     while (!WindowShouldClose()) {
         
@@ -984,11 +1104,19 @@ void bscan_loop(BScanContext* context) {
         // PIPE_START(yuv_to_gray, camera->output)
         // PIPE(grayscale)
         // PIPE(blur)
-        PIPE(gaus3x3)
-        PIPE(saturate)
-        // PIPE(gaus5x5)
+        // PIPE(gaus3x3)
+        // PIPE(saturate)
+        PIPE(gaus5x5)
 
-        subtract(src, prev);
+        // if (!hasBackground) {
+        //     hasBackground = true;
+        //     update_background(backgroundImage, src);
+        //     continue;
+        // }
+
+        // subtract(src, backgroundImage);
+
+        dim_subtract(src, backgroundImage);
 
         // PIPE(edge)
         PIPE(sobel)
@@ -1018,22 +1146,35 @@ void bscan_loop(BScanContext* context) {
         float variance = scatter_score(context, previousCenter);
         float varianceThreshold = 23.f;
         Vector2 center;
+        Vector2 headCenter;
         if (variance < varianceThreshold * varianceThreshold || graph->points_len > 70) {
             center = detect_center(context);
 
             center.x = center.x * 0.2f + previousCenter.x * 0.8f;
             center.y = center.y * 0.2f + previousCenter.y * 0.8f;
-
             previousCenter = center;
+
+            headCenter = detect_head(context, center);
+
+            headCenter.x = headCenter.x * 0.2f + previousHead.x * 0.8f;
+            headCenter.y = headCenter.y * 0.2f + previousHead.y * 0.8f;
+            previousHead = headCenter;
+
         } else {
             printf("LOW %f\n", sqrt(variance));
             center = previousCenter;
+            headCenter = previousHead;
         }
+
 
 
         Bone* torso = &skeleton->bones[BONE_TORSO];
         torso->localPos.x = 2 * center.x / render->target.w - 1;
         torso->localPos.y = 1 - 2 * center.y / render->target.h;
+
+        Bone* head = &skeleton->bones[BONE_HEAD];
+        head->localPos.x = 2 * (headCenter.x) / render->target.w - 1;
+        head->localPos.y = 1 - 2 * (headCenter.y) / render->target.h;
 
         // edge_sum(context);
 
