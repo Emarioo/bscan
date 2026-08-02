@@ -556,8 +556,11 @@ void subtract(Buffer dst_buf, FloatBuffer src_buf) {
             W = dst[x + y * pw];
             DECODE_RGB(W, R, G, B);
 
-            int diff = ABS(R - sR) + ABS(G - sG) + ABS(B - sB);
-            if (diff < 80) {
+            int dr = ABS(R - sR) * 2; 
+            int dg = ABS(G - sG) * 3;
+            int db = ABS(B - sB) * 1;
+            const int diffVal = 13;
+            if (dr < diffVal || dg < diffVal || db < diffVal) {
                 R = 0;
                 G = 0;
                 B = 0;
@@ -1042,6 +1045,12 @@ void compute_skeleton(Skeleton* skel) {
     }
 }
 
+typedef enum {
+    MODE_ALL_FILTERS,
+    MODE_RAW_VIDEO,
+    MODE_ONLY_SUBTRACT,
+} FilterMode;
+
 void bscan_loop(BScanContext* context) {
 
     CameraContext* camera   = context->camera   = calloc(1, sizeof(CameraContext));
@@ -1092,14 +1101,24 @@ void bscan_loop(BScanContext* context) {
 
     bool hasBackground = false;
 
+    FilterMode filterMode = MODE_ALL_FILTERS;
+
     while (!WindowShouldClose()) {
         
         camera_update(context->camera);
+
 
         Buffer tmp;
         Buffer src = temp0;
         Buffer dst = temp1;
 
+        if (IsKeyPressed(KEY_ONE)) {
+            filterMode = MODE_ALL_FILTERS;
+        } else if (IsKeyPressed(KEY_TWO)) {
+            filterMode = MODE_RAW_VIDEO;
+        } else if (IsKeyPressed(KEY_THREE)) {
+            filterMode = MODE_ONLY_SUBTRACT;
+        }
 
         #define PIPE_START(F, INPUT) F(dst, INPUT); tmp = src; src = dst; dst = tmp;
         #define PIPE(F) F(dst, src); tmp = src; src = dst; dst = tmp;
@@ -1108,44 +1127,41 @@ void bscan_loop(BScanContext* context) {
         // PIPE_START(yuv_to_gray, camera->output)
         // PIPE(grayscale)
         // PIPE(blur)
-        // PIPE(gaus3x3)
+        PIPE(gaus3x3)
         // PIPE(saturate)
         // PIPE(gaus5x5)
 
-        if (!hasBackground && camera->output.pixels) {
-            hasBackground = true;
+        if ((!hasBackground || IsKeyPressed(KEY_R)) && camera->output.pixels) {
             update_background(backgroundImage, src);
-            continue;
+
+            if (!hasBackground) {
+                hasBackground = true;
+                continue;
+            }
         }
 
-        subtract(src, backgroundImage);
-
+        if (filterMode == MODE_ONLY_SUBTRACT || filterMode == MODE_ALL_FILTERS) {
+            subtract(src, backgroundImage);
         // dim_subtract(src, backgroundImage);
-
-        // PIPE(edge)
-        // PIPE(sobel)
-
-        // tmp = temp2;
-        // temp2 = src;
-
-        // if (src.pixels == temp0.pixels) {
-        //     temp0 = tmp;
-        // } else if (src.pixels == temp1.pixels) {
-        //     temp1 = tmp;
-        // }
-
+        }
 
         // PIPE(flatten)
-        // PIPE(sobel_rgb)
-        // PIPE(flatten)
-        // PIPE(flatten)
-        // PIPE(flatten)
+
+        if (filterMode == MODE_ALL_FILTERS) {
+            // PIPE(edge)
+            PIPE(sobel)
+            // PIPE(sobel_rgb)
+        }
+
+
 
 
         graph->points_len = 0;
         graph->edges_len = 0;
 
-        // point_sum(context, src);
+        if (filterMode == MODE_ALL_FILTERS) {
+            point_sum(context, src);
+        }
 
         float variance = scatter_score(context, previousCenter);
         float varianceThreshold = 23.f;

@@ -186,7 +186,6 @@ void camera_update(CameraContext* context) {
 
     if (!internal->prevSample) {
         // use blank template, print warning?
-        printf("WARNING NULL PIXELS\n");
         context->output.pixels  = NULL;
         return;
     }
