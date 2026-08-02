@@ -126,6 +126,8 @@ Edge* make_edge(BScanContext* context, Point* a, Point* b);
 
 
 void yuv_to_rgb(Buffer dst_buf, Buffer src_buf) {
+    if (!src_buf.pixels)
+        return;
 
     word* dst = dst_buf.pixels;
     word* src = src_buf.pixels;
@@ -169,6 +171,8 @@ void yuv_to_rgb(Buffer dst_buf, Buffer src_buf) {
 
 
 void yuv_to_gray(Buffer dst_buf, Buffer src_buf) {
+    if (!src_buf.pixels)
+        return;
 
     word* dst = dst_buf.pixels;
     word* src = src_buf.pixels;
@@ -737,7 +741,7 @@ void point_sum(BScanContext* context, Buffer src_buf) {
     Graph* graph = context->graph;
     int screenEdgePadding = 5;
 
-    const int threshold = 9;
+    const int threshold = 6;
 
     for (int y = screenEdgePadding; y < ph - 2*screenEdgePadding; y++) {
         for (int x = screenEdgePadding; x < pw - 2*screenEdgePadding; x++) {
@@ -1106,20 +1110,20 @@ void bscan_loop(BScanContext* context) {
         // PIPE(blur)
         // PIPE(gaus3x3)
         // PIPE(saturate)
-        PIPE(gaus5x5)
+        // PIPE(gaus5x5)
 
-        // if (!hasBackground) {
-        //     hasBackground = true;
-        //     update_background(backgroundImage, src);
-        //     continue;
-        // }
+        if (!hasBackground && camera->output.pixels) {
+            hasBackground = true;
+            update_background(backgroundImage, src);
+            continue;
+        }
 
-        // subtract(src, backgroundImage);
+        subtract(src, backgroundImage);
 
-        dim_subtract(src, backgroundImage);
+        // dim_subtract(src, backgroundImage);
 
         // PIPE(edge)
-        PIPE(sobel)
+        // PIPE(sobel)
 
         // tmp = temp2;
         // temp2 = src;
@@ -1141,7 +1145,7 @@ void bscan_loop(BScanContext* context) {
         graph->points_len = 0;
         graph->edges_len = 0;
 
-        point_sum(context, src);
+        // point_sum(context, src);
 
         float variance = scatter_score(context, previousCenter);
         float varianceThreshold = 23.f;

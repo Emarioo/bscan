@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <bscan/bscan.h>
+#include "bscan/bscan.h"
 
 
 int ray_test(void);
