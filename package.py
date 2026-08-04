@@ -43,6 +43,7 @@ def main(args):
     shutil.copy(f"{BIN_DIR}/{BSCAN_EXE}", f"{PACKAGE}/{BSCAN_EXE}")
     shutil.copy(f"{BIN_DIR}/{DRIVER_DLL}", f"{DRIVER_BIN}/{DRIVER_DLL}")
     shutil.copy(f"{DRIVER_ROOT}/driver.vrdrivermanifest", f"{DRIVER_DIR}/driver.vrdrivermanifest")
+    shutil.copytree(f"{DRIVER_ROOT}/resources", f"{DRIVER_DIR}/resources", dirs_exist_ok=True)
 
     prev_dir = os.getcwd()
     os.chdir(RELEASES)

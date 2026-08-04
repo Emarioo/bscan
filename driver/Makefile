@@ -39,7 +39,7 @@ ifeq ($(OS),Windows_NT)
 	CFLAGS := -nologo -DEBUG $(OFLAG)
 	# Turning off optimizations for debugging
 	# CFLAGS += -O0
-	CFLAGS += -I$(ROOT)/include -I$(ROOT)/src -I$(OPENVR_ROOT)/headers
+	CFLAGS += -I$(ROOT)/include -I$(ROOT)/src -I$(ROOT)/../src -I$(OPENVR_ROOT)/headers
 	CPPFLAGS := $(CFLAGS)
 
 	LDFLAGS := -nologo -DLL -DEBUG -MACHINE:X64 -LIBPATH:$(OPENVR_ROOT)/lib/win64 openvr_api.lib
@@ -82,7 +82,8 @@ endif
 
 
 SRC_DIRS := \
-	$(ROOT)/src
+	$(ROOT)/src \
+	$(ROOT)/../src/bscan/common
 
 rwildcard = $(foreach d,$(wildcard $1/*),$(call rwildcard,$d,$2) $(filter $(subst *,%,$2),$d))
 

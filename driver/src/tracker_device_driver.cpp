@@ -4,6 +4,8 @@
 #include "driverlog.h"
 #include "vrmath.h"
 
+#include "bscan/common/types.h"
+
 // Let's create some variables for strings used in getting settings.
 // This is the section where all of the settings we want are stored. A section name can be anything,
 // but if you want to store driver specific settings, it's best to namespace the section with the driver identifier
@@ -147,11 +149,19 @@ vr::DriverPose_t MyTrackerDeviceDriver::GetPose()
 	// Set the pose orientation to the hmd orientation with the offset applied.
 	pose.qRotation = hmd_orientation;
 
-	const vr::HmdVector3_t offset_position = {
+	vr::HmdVector3_t offset_position = {
 		-0.15f + my_tracker_id_ * 0.15f, // translate our tracker depending on the id we were provided
 		0.1f,							// shift it up a little to make it more in view
 		-0.5f,							// put each controller 0.5m forward in front of the hmd so we can see it.
 	};
+
+	if (my_tracker_id_ == 1) {
+		BScan_Bone bone = { 0 };
+		bscan_fetch_bone(BONE_TORSO, &bone);
+		memcpy(offset_position.v, bone.pos, sizeof(bone.pos));
+
+        offset_position.v[2] = -1.0f;
+	}
 
 	// Rotate our offset by the hmd quaternion (so the controllers are always facing towards us), and add then add the
 	// position of the hmd to put it into position.
@@ -179,10 +189,26 @@ vr::DriverPose_t MyTrackerDeviceDriver::GetPose()
 	return pose;
 }
 
+static bool printedCouldNotConnect;
+
 void MyTrackerDeviceDriver::MyPoseUpdateThread()
 {
 	while ( is_active_ )
 	{
+		void* state = bscan_ipc_state();
+		if (!state) {
+			bool yes = bscan_ipc_connect();
+			if (!yes) {
+				if (!printedCouldNotConnect) {
+					printedCouldNotConnect = true;
+					DriverLog("Could not connect to BScan IPC...");
+				}
+				std::this_thread::sleep_for( std::chrono::seconds( 1 ) );
+			} else {
+				DriverLog("Connected to BScan IPC");
+			}
+		}
+
 		// Inform the vrserver that our tracked device's pose has updated, giving it the pose returned by our GetPose().
 		vr::VRServerDriverHost()->TrackedDevicePoseUpdated( my_device_index_, GetPose(), sizeof( vr::DriverPose_t ) );
 
@@ -232,19 +258,19 @@ void MyTrackerDeviceDriver::MyRunFrame()
 	static bool b_values = false;
 	static float f_values = 0.f;
 
-	if (incrementor == 200) {
-		incrementor = 0;
-		b_values = !b_values;
-		f_values = 1.f - f_values;
-		DriverLog("Toggled %s %.2f", b_values ? "on" : "off", f_values);
-	}
-	incrementor++;
+	// if (incrementor == 200) {
+	// 	incrementor = 0;
+	// 	b_values = !b_values;
+	// 	f_values = 1.f - f_values;
+	// 	DriverLog("Toggled %s %.2f", b_values ? "on" : "off", f_values);
+	// }
+	// incrementor++;
 
-	// update our inputs here
-	vr::VRDriverInput()->UpdateBooleanComponent( input_handles_[ MyComponent_grip_click ], b_values, 0 );
+	// // update our inputs here
+	// vr::VRDriverInput()->UpdateBooleanComponent( input_handles_[ MyComponent_grip_click ], b_values, 0 );
 
-	vr::VRDriverInput()->UpdateBooleanComponent( input_handles_[ MyComponent_trigger_click ], b_values, 0 );
-	vr::VRDriverInput()->UpdateScalarComponent( input_handles_[ MyComponent_trigger_value ], f_values, 0 );
+	// vr::VRDriverInput()->UpdateBooleanComponent( input_handles_[ MyComponent_trigger_click ], b_values, 0 );
+	// vr::VRDriverInput()->UpdateScalarComponent( input_handles_[ MyComponent_trigger_value ], f_values, 0 );
 }
 
 

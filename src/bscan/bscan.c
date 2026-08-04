@@ -1,6 +1,7 @@
 
 #include "bscan/bscan.h"
 
+#include "bscan/common/types.h"
 
 
 #include "raylib.h"
@@ -559,7 +560,7 @@ void subtract(Buffer dst_buf, FloatBuffer src_buf) {
             int dr = ABS(R - sR) * 2; 
             int dg = ABS(G - sG) * 3;
             int db = ABS(B - sB) * 1;
-            const int diffVal = 17;
+            const int diffVal = 27;
             if (dr < diffVal || dg < diffVal || db < diffVal) {
                 R = 0;
                 G = 0;
@@ -1198,6 +1199,12 @@ void bscan_loop(BScanContext* context) {
 
     render_init(context->render);
 
+    bool yes = bscan_ipc_init();
+    if (!yes) {
+        printf("ERROR: Could not initiate IPC.\n");
+        exit(1);
+    }
+
     Buffer temp0 = make_buffer(context);
     Buffer temp1 = make_buffer(context);
     render->target = temp1;
@@ -1226,7 +1233,9 @@ void bscan_loop(BScanContext* context) {
     raycam.fovy = 45.0f;                                // Camera field-of-view Y
     raycam.projection = CAMERA_PERSPECTIVE;             // Camera projection type
 
+    static bool mouseLocked;
     DisableCursor();                // Limit cursor to relative movement inside the window
+    mouseLocked = true;
 
     FloatBuffer backgroundImage = make_float_buffer(context);
 
@@ -1240,6 +1249,13 @@ void bscan_loop(BScanContext* context) {
     while (!WindowShouldClose()) {
         
         camera_update(context->camera);
+
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            if (!mouseLocked)
+                DisableCursor();
+            else
+                EnableCursor();
+        }
 
 
         Buffer tmp;
@@ -1366,7 +1382,22 @@ void bscan_loop(BScanContext* context) {
 
         // edge_sum(context);
 
-        // printf("%d\n", graph->points_len);
+
+        skeleton->bones[BONE_TORSO].localPos = (Vector3){
+            .x = screen_to_world_x(context, imageSkeleton->bones[BONE_TORSO].localPos.x),
+            .y = screen_to_world_y(context, imageSkeleton->bones[BONE_TORSO].localPos.y),
+            .z = 0,
+        };
+        skeleton->bones[BONE_HEAD].localPos = (Vector3){
+            .x = screen_to_world_x(context, imageSkeleton->bones[BONE_HEAD].localPos.x),
+            .y = screen_to_world_y(context, imageSkeleton->bones[BONE_HEAD].localPos.y),
+            .z = 0,
+        };
+
+        compute_skeleton(skeleton);
+
+        bscan_update_bones(skeleton);
+
 
         render->target = src;
 
@@ -1483,7 +1514,7 @@ void render_init(RenderContext* render) {
     InitWindow(render->screenWidth, render->screenHeight, g_windowTitle);
 
     SetTargetFPS(60);
-
+    SetExitKey(KEY_Q);
 }
 
 void render_update(RenderContext* render) {
