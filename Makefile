@@ -16,7 +16,7 @@ else
   EXECUTABLE ?= $(INT_DIR)/$(APP_NAME)
 endif
 
-SILENT ?= 
+SILENT ?= @
 OFLAG  ?=
 export OFLAG # export to device makefiles
 
@@ -42,13 +42,6 @@ ifeq ($(OS),Windows_NT)
     CFLAGS += -I$(ROOT)/libs/$(RAYLIB_VER)/include
     LDFLAGS += $(ROOT)/libs/$(RAYLIB_VER)/lib/libraylib.a -lgdi32 -lwinmm
     LDFLAGS += -lmfplat -lmf -lmfreadwrite -lmfuuid
-
-
-#pragma comment(lib, "mfplat.lib")
-#pragma comment(lib, "mf.lib")
-#pragma comment(lib, "mfreadwrite.lib")
-#pragma comment(lib, "mfuuid.lib")
-
 else
     IS_NIXOS := $(shell test -e /etc/nixos && echo yes)
     
@@ -96,13 +89,13 @@ ifeq ($(OS),Windows_NT)
 	MKDIR  = - cmd /C mkdir $(subst /,\,$1)
 	CP     := - cmd /C copy "$(subst /,\,$1)" "$(subst /,\,$2)"
 else
-	RM_CMD := rm -f
+	RM_CMD := rm -rf
 	MKDIR  = mkdir -p $1
 	CP     := cp $1
 endif
 
 
-all: $(EXECUTABLE)
+all: $(EXECUTABLE) driver
 
 ifeq (0, $(words $(findstring $(MAKECMDGOALS), clean)))
     -include $(DEP_FILES)
@@ -125,13 +118,15 @@ $(EXECUTABLE): $(OBJ_FILES) | $(INT_DIR)
 	$(SILENT) $(call MKDIR,$(BIN_DIR))
 	$(SILENT) $(CC) -o $@ $^ $(LDFLAGS)
 ifeq ($(OS),Windows_NT)
-	cmd /C copy $(subst /,\,$@) $(subst /,\,$(BIN_DIR)/$(notdir $@))
+	$(SILENT) cmd /C copy $(subst /,\,$@) $(subst /,\,$(BIN_DIR)/$(notdir $@))
 else
-	cp $@ $(BIN_DIR)/$(notdir $@)
+	$(SILENT) cp $@ $(BIN_DIR)/$(notdir $@)
 endif
 
-.PHONY: clean
+.PHONY: clean_all clean driver
 
+driver:
+	$(SILENT) $(MAKE) -f $(ROOT)/driver/Makefile
 
 clean:
 ifeq ($(OS),Windows_NT)
@@ -139,4 +134,11 @@ ifeq ($(OS),Windows_NT)
 else
 	$(SILENT) $(RM_CMD) $(OBJ_FILES) $(DEP_FILES) $(EXECUTABLE)
 endif
+	$(SILENT) $(MAKE) -f $(ROOT)/driver/Makefile clean
 
+clean_all: clean
+ifeq ($(OS),Windows_NT)
+	$(SILENT) $(RM_CMD) releases
+else
+	$(SILENT) $(RM_CMD) releases
+endif
