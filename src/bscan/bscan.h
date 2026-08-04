@@ -27,6 +27,7 @@ typedef struct {
     Graph* graph;
     
     Skeleton* skeleton;
+    ImageSkeleton* imageSkeleton;
 
 } BScanContext;
 

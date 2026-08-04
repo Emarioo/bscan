@@ -559,7 +559,7 @@ void subtract(Buffer dst_buf, FloatBuffer src_buf) {
             int dr = ABS(R - sR) * 2; 
             int dg = ABS(G - sG) * 3;
             int db = ABS(B - sB) * 1;
-            const int diffVal = 13;
+            const int diffVal = 17;
             if (dr < diffVal || dg < diffVal || db < diffVal) {
                 R = 0;
                 G = 0;
@@ -1020,6 +1020,72 @@ void prepare_skeleton(Skeleton* skel) {
     }
 }
 
+void prepare_image_skeleton(ImageSkeleton* skel) {
+    
+    skel->bones_len = 2;
+
+
+    // Center bones
+
+    skel->bones[BONE_TORSO] = (ImageBone){
+        .parent = 0,
+    };
+
+    skel->bones[BONE_HEAD] = (ImageBone){
+        .parent = BONE_TORSO,
+        .length = 60,
+    };
+
+    // Left bones
+
+    // skel->bones[BONE_LEFT_SHOULDER] = (ImageBone){
+    //     .parent = BONE_TORSO,
+    //     .length = 40,
+    // };
+
+    // skel->bones[BONE_LEFT_ARM] = (ImageBone){
+    //     .parent = BONE_LEFT_SHOULDER,
+    //     .localPos = {0, -0.30f, 0},
+    //     .localRot = QuaternionIdentity(),
+    // };
+    // skel->bones[BONE_LEFT_WRIST] = (ImageBone){
+    //     .parent = BONE_LEFT_ARM,
+    //     .localPos = {0, -0.30f, 0},
+    //     .localRot = QuaternionIdentity(),
+    // };
+
+    // skel->bones[BONE_LEFT_HIP] = (ImageBone){
+    //     .parent = BONE_TORSO,
+    //     .localPos = {-0.15, -0.53f, 0},
+    //     .localRot = QuaternionIdentity(),
+    // };
+
+    // skel->bones[BONE_LEFT_KNEE] = (ImageBone){
+    //     .parent = BONE_LEFT_HIP,
+    //     .localPos = {0, -0.3f, 0},
+    //     .localRot = QuaternionIdentity(),
+    // };
+
+    // skel->bones[BONE_LEFT_ANKLE] = (ImageBone){
+    //     .parent = BONE_LEFT_KNEE,
+    //     .localPos = {0, -0.3f, 0.0},
+    //     .localRot = QuaternionIdentity(),
+    // };
+
+    // // Right bones
+
+    // int leftToRightStride = BONE_RIGHT_SHOULDER - BONE_LEFT_SHOULDER;
+    // for (int i = 0; i < leftToRightStride; i++) {
+    //     ImageBone* left = &skel->bones[BONE_LEFT_SHOULDER + i];
+    //     ImageBone* right = &skel->bones[BONE_RIGHT_SHOULDER + i];
+    //     *right = *left;
+    //     if (right->parent >= BONE_LEFT_SHOULDER)
+    //         right->parent += leftToRightStride;
+    //     right->localPos.x = -right->localPos.x;
+    //     right->localRot.x = -right->localRot.x;
+    // }
+}
+
 void compute_skeleton(Skeleton* skel) {
 
     for (int i=0;i<skel->bones_len;i++) {
@@ -1029,20 +1095,86 @@ void compute_skeleton(Skeleton* skel) {
         if (!parent) {
             bone->worldRot = bone->localRot;
             bone->worldPos = bone->localPos;
-            bone->worldPos.y += 0.9f;
+            bone->worldPos.y += 0.8f;
             continue;
         }
 
         Vector3 offset = Vector3RotateByQuaternion(bone->localPos, parent->worldRot);
         bone->worldPos = Vector3Add(parent->worldPos, offset);
         bone->worldRot = QuaternionMultiply(parent->worldRot, bone->localRot);
-
-        if (i == BONE_HEAD) {
-            bone->worldRot = QuaternionIdentity();
-            bone->worldPos = bone->localPos;
-            bone->worldPos.y += 0.9f;
-        }
     }
+}
+
+void compute_image_skeleton(ImageSkeleton* skel) {
+
+    for (int i=0;i<skel->bones_len;i++) {
+        ImageBone* bone = &skel->bones[i];
+        ImageBone* parent = i == 0 ? NULL : &skel->bones[bone->parent];
+
+        if (!parent) {
+            bone->worldPos = bone->localPos;
+            // printf("Torso %f %f\n", bone->worldPos.x, bone->worldPos.y);
+            continue;
+        }
+
+        // @TODO This math is wrong
+        Vector2 offset = Vector2Rotate((Vector2){ 0, -bone->length }, bone->angle);
+        // Vector2 offset = Vector2Rotate((Vector2){ 0, bone->length }, bone->angle);
+        offset = Vector2Add(bone->localPos, offset);
+        bone->worldPos = Vector2Add(parent->worldPos, offset);
+
+    }
+}
+
+static inline int world_to_screen_x(BScanContext* context, float x)
+{
+    return (int)((x + 1.0f) * context->render->target.w * 0.5f);
+}
+
+static inline int world_to_screen_y(BScanContext* context, float y)
+{
+    return (int)((1.0f - y) * context->render->target.h * 0.5f);
+}
+
+static inline float screen_to_world_x(BScanContext* context, int x)
+{
+    return (2.0f * x) / context->render->target.w - 1.0f;
+}
+
+static inline float screen_to_world_y(BScanContext* context, int y)
+{
+    return 1.0f - (2.0f * y) / context->render->target.h;
+}
+
+
+int score_bone(BScanContext* context, ImageBone* bone) {
+    Graph* graph = context->graph;
+    ImageBone* torso = &context->imageSkeleton->bones[BONE_TORSO];
+    int height_limit = torso->localPos.y;
+
+    // printf("Height %d\n", height_limit);
+
+    int score = 0;
+    int scoredPoints = 0;
+    for (int i = 0; i < graph->points_len; i++) {
+        Point* point = &graph->points[i];
+
+        if (point->y > height_limit)
+            continue;
+
+        // int tx = world_to_screen_x(context, bone->worldPos.x);
+        // int ty = world_to_screen_y(context, bone->worldPos.y);
+
+        int dx = point->x - bone->worldPos.x;
+        int dy = point->y - bone->worldPos.y;
+        int dist = dx * dx + dy * dy;
+        score += dist;
+        scoredPoints++;
+    }
+    if (scoredPoints == 0) {
+        return 0;
+    }
+    return sqrt(score / scoredPoints);
 }
 
 typedef enum {
@@ -1057,8 +1189,10 @@ void bscan_loop(BScanContext* context) {
     RenderContext* render   = context->render   = calloc(1, sizeof(RenderContext));
     Graph*         graph    = context->graph    = calloc(1, sizeof(Graph));
     Skeleton*      skeleton = context->skeleton = calloc(1, sizeof(Skeleton));
+    ImageSkeleton* imageSkeleton = context->imageSkeleton = calloc(1, sizeof(ImageSkeleton));
 
     prepare_skeleton(skeleton);
+    prepare_image_skeleton(imageSkeleton);
 
     camera_init(context->camera);
 
@@ -1163,6 +1297,10 @@ void bscan_loop(BScanContext* context) {
             point_sum(context, src);
         }
 
+
+        
+
+
         float variance = scatter_score(context, previousCenter);
         float varianceThreshold = 23.f;
         Vector2 center;
@@ -1170,31 +1308,61 @@ void bscan_loop(BScanContext* context) {
         if (variance < varianceThreshold * varianceThreshold || graph->points_len > 70) {
             center = detect_center(context);
 
+            // Merging current and previous center to reduce jitter.
             center.x = center.x * 0.2f + previousCenter.x * 0.8f;
             center.y = center.y * 0.2f + previousCenter.y * 0.8f;
             previousCenter = center;
 
-            headCenter = detect_head(context, center);
+            ImageBone* torso = &imageSkeleton->bones[BONE_TORSO];
+            torso->localPos.x = center.x;
+            torso->localPos.y = center.y;
 
-            headCenter.x = headCenter.x * 0.2f + previousHead.x * 0.8f;
-            headCenter.y = headCenter.y * 0.2f + previousHead.y * 0.8f;
-            previousHead = headCenter;
+            ImageBone* head = &imageSkeleton->bones[BONE_HEAD];
+
+            int bestScore = -1;
+            int bestStepIndex = -1;
+
+            float minValue = -PI/2;
+            float maxValue = PI/2;
+            float stepSize = PI/24;
+            int stepCount = (maxValue - minValue) / stepSize;
+            for (int si=0;si<stepCount;si++) {
+                float angle = minValue + si * stepSize;
+                head->angle = angle;
+                compute_image_skeleton(imageSkeleton);
+                int score = score_bone(context, head);
+                // printf(" Ang %f, %d [%f %f]\n", angle, score, head->localPos.x, head->localPos.y);
+
+                if (bestScore == -1 || score < bestScore) {
+                    bestScore = score;
+                    bestStepIndex = si;
+                }
+            }
+
+            float angle = minValue + bestStepIndex * stepSize;
+            head->angle = angle;
+            compute_image_skeleton(imageSkeleton);
+            
+            // headCenter = detect_head(context, center);
+
+            // printf("Fin %f %d %d/%d [%f %f]\n", angle, bestScore, bestStepIndex, stepCount, head->localPos.x, head->localPos.y);
+            // printf("Fin %f %d %d/%d [%f %f]\n", angle, bestScore, bestStepIndex, stepCount, head->localPos.x, head->localPos.y);
+            
+
+            // head->localPos.x = 2 * (headCenter.x) / render->target.w - 1;
+            // head->localPos.y = 1 - 2 * (headCenter.y) / render->target.h;
+
+            // headCenter.x = headCenter.x * 0.2f + previousHead.x * 0.8f;
+            // headCenter.y = headCenter.y * 0.2f + previousHead.y * 0.8f;
+            // previousHead = headCenter;
 
         } else {
+            // To few points or they are too scattered for any kind of accuracy.
             printf("LOW %f\n", sqrt(variance));
             center = previousCenter;
-            headCenter = previousHead;
+            // headCenter = previousHead;
         }
 
-
-
-        Bone* torso = &skeleton->bones[BONE_TORSO];
-        torso->localPos.x = 2 * center.x / render->target.w - 1;
-        torso->localPos.y = 1 - 2 * center.y / render->target.h;
-
-        Bone* head = &skeleton->bones[BONE_HEAD];
-        head->localPos.x = 2 * (headCenter.x) / render->target.w - 1;
-        head->localPos.y = 1 - 2 * (headCenter.y) / render->target.h;
 
         // edge_sum(context);
 
@@ -1249,12 +1417,30 @@ void bscan_loop(BScanContext* context) {
 
 
         // Calculate bone world position from relative positions
+        compute_image_skeleton(imageSkeleton);
         compute_skeleton(skeleton);
 
         
-        BeginMode3D(raycam);
+        // printf("DRAW %d\n", imageSkeleton->bones_len);
+        for (int i = 0; i < imageSkeleton->bones_len; i++) {
+            ImageBone* b = &imageSkeleton->bones[i];
+            // printf("Draw %f %f\n", b->worldPos.x, b->worldPos.y);
+            DrawCircle(b->worldPos.x, b->worldPos.y, 5, GREEN);
 
-            // DrawCube((Vector3){0,0,0}, 1, 1, 1, WHITE);
+            if (i == 0)
+                continue;
+
+            ImageBone* p = &imageSkeleton->bones[b->parent];
+
+            DrawLine(
+                p->worldPos.x,
+                p->worldPos.y,
+                b->worldPos.x,
+                b->worldPos.y,
+                BLUE);
+        }
+        
+        BeginMode3D(raycam);
 
             DrawGrid(10, 1.0f);        // Draw a grid
 

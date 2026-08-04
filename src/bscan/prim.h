@@ -63,4 +63,19 @@ typedef struct {
     Bone bones[BONE_COUNT];
     int  bones_len;
 } Skeleton;
+typedef struct {
+    Vector2 localPos;
+    Vector2 worldPos;
+    float   angle;
+    float   length;
+    int parent;
+} ImageBone;
+
+typedef struct {
+    ImageBone bones[BONE_COUNT];
+    int  bones_len;
+} ImageSkeleton;
+
+
+
 
