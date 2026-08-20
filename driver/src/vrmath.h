@@ -178,6 +178,11 @@ static vr::HmdVector3_t operator+( const vr::HmdVector3_t &vec1, const vr::HmdVe
 	return { vec1.v[ 0 ] + vec2.v[ 0 ], vec1.v[ 1 ] + vec2.v[ 1 ], vec1.v[ 2 ] + vec2.v[ 2 ] };
 }
 
+static vr::HmdVector3_t operator-( const vr::HmdVector3_t &vec1, const vr::HmdVector3_t &vec2 )
+{
+	return { vec1.v[ 0 ] - vec2.v[ 0 ], vec1.v[ 1 ] - vec2.v[ 1 ], vec1.v[ 2 ] - vec2.v[ 2 ] };
+}
+
 static vr::HmdVector3d_t operator-( const vr::HmdVector3d_t &vec1, const vr::HmdVector3d_t &vec2 )
 {
 	return { vec1.v[ 0 ] - vec2.v[ 0 ], vec1.v[ 1 ] - vec2.v[ 1 ], vec1.v[ 2 ] - vec2.v[ 2 ] };

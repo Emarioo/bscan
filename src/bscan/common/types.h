@@ -35,9 +35,15 @@ typedef struct {
 } BScan_Bone;
 
 typedef struct {
+    bool debugMode;
+} BScan_Settings;
+
+typedef struct {
 
     uint32_t version;
     uint32_t sequence;
+
+    BScan_Settings settings;
 
     BScan_Bone bones[12];
 
@@ -59,6 +65,8 @@ BScan_TrackerState* bscan_ipc_state();
 
 bool bscan_update_bones(Skeleton* skeleton);
 bool bscan_fetch_bone(BScan_BoneKind kind, BScan_Bone* bone);
+bool bscan_get_settings(BScan_Settings* settings);
+bool bscan_set_settings(BScan_Settings* settings);
 
 #ifdef __cplusplus
 } // extern "C"

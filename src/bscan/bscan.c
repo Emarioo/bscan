@@ -1234,8 +1234,6 @@ void bscan_loop(BScanContext* context) {
     raycam.projection = CAMERA_PERSPECTIVE;             // Camera projection type
 
     static bool mouseLocked;
-    DisableCursor();                // Limit cursor to relative movement inside the window
-    mouseLocked = true;
 
     FloatBuffer backgroundImage = make_float_buffer(context);
 
@@ -1244,6 +1242,15 @@ void bscan_loop(BScanContext* context) {
 
     bool hasBackground = false;
 
+    BScan_Settings settings;
+    bool yes2 = bscan_get_settings(&settings);
+    if (!yes2) {
+        printf("Ignoring 'K', IPC not started\n");
+    } else {
+        settings.debugMode = true;
+        bscan_set_settings(&settings);
+    }
+
     FilterMode filterMode = MODE_ALL_FILTERS;
 
     while (!WindowShouldClose()) {
@@ -1251,12 +1258,24 @@ void bscan_loop(BScanContext* context) {
         camera_update(context->camera);
 
         if (IsKeyPressed(KEY_ESCAPE)) {
-            if (!mouseLocked)
+            if (!mouseLocked) {
                 DisableCursor();
-            else
+            } else {
                 EnableCursor();
+            }
+            mouseLocked = !mouseLocked;
         }
 
+        if (IsKeyPressed(KEY_K)) {
+            BScan_Settings settings;
+            bool yes = bscan_get_settings(&settings);
+            if (!yes) {
+                printf("Ignoring 'K', IPC not started\n");
+            } else {
+                settings.debugMode = !settings.debugMode;
+                bscan_set_settings(&settings);
+            }
+        }
 
         Buffer tmp;
         Buffer src = temp0;
@@ -1340,7 +1359,7 @@ void bscan_loop(BScanContext* context) {
 
             float minValue = -PI/2;
             float maxValue = PI/2;
-            float stepSize = PI/24;
+            float stepSize = PI/48;
             int stepCount = (maxValue - minValue) / stepSize;
             for (int si=0;si<stepCount;si++) {
                 float angle = minValue + si * stepSize;
@@ -1384,13 +1403,13 @@ void bscan_loop(BScanContext* context) {
 
 
         skeleton->bones[BONE_TORSO].localPos = (Vector3){
-            .x = screen_to_world_x(context, imageSkeleton->bones[BONE_TORSO].localPos.x),
-            .y = screen_to_world_y(context, imageSkeleton->bones[BONE_TORSO].localPos.y),
+            .x = screen_to_world_x(context, imageSkeleton->bones[BONE_TORSO].worldPos.x),
+            .y = screen_to_world_y(context, imageSkeleton->bones[BONE_TORSO].worldPos.y),
             .z = 0,
         };
         skeleton->bones[BONE_HEAD].localPos = (Vector3){
-            .x = screen_to_world_x(context, imageSkeleton->bones[BONE_HEAD].localPos.x),
-            .y = screen_to_world_y(context, imageSkeleton->bones[BONE_HEAD].localPos.y),
+            .x = screen_to_world_x(context, imageSkeleton->bones[BONE_HEAD].worldPos.x) - screen_to_world_x(context, imageSkeleton->bones[BONE_TORSO].worldPos.x),
+            .y = screen_to_world_y(context, imageSkeleton->bones[BONE_HEAD].worldPos.y) - screen_to_world_y(context, imageSkeleton->bones[BONE_TORSO].worldPos.y),
             .z = 0,
         };
 
@@ -1403,7 +1422,9 @@ void bscan_loop(BScanContext* context) {
 
         mouse_pos_snap_fix();
 
-        UpdateCamera(&raycam, CAMERA_FREE);
+        if (mouseLocked) {
+            UpdateCamera(&raycam, CAMERA_FREE);
+        }
 
         BeginDrawing();
 

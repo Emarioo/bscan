@@ -10,7 +10,7 @@
 // This is the section where all of the settings we want are stored. A section name can be anything,
 // but if you want to store driver specific settings, it's best to namespace the section with the driver identifier
 // ie "<my_driver>_<section>" to avoid collisions
-static const char *my_tracker_main_settings_section = "driver_simpletrackers";
+static const char *my_tracker_main_settings_section = "driver_bscan";
 
 // These are the keys we want to retrieve the values for in the settings
 static const char *my_tracker_settings_key_model_number = "mytracker_model_number";
@@ -119,6 +119,14 @@ void MyTrackerDeviceDriver::DebugRequest(
 		pchResponseBuffer[ 0 ] = 0;
 }
 
+vr::HmdVector3_t PosFromBone(BScan_Bone bone) {
+	return vr::HmdVector3_t{
+		bone.pos[0],
+		bone.pos[1],
+		bone.pos[2],
+	};
+}
+
 //-----------------------------------------------------------------------------
 // Purpose: This is never called by vrserver in recent OpenVR versions,
 // but is useful for giving data to vr::VRServerDriverHost::TrackedDevicePoseUpdated.
@@ -147,24 +155,43 @@ vr::DriverPose_t MyTrackerDeviceDriver::GetPose()
 	const vr::HmdQuaternion_t hmd_orientation = HmdQuaternion_FromMatrix( hmd_pose.mDeviceToAbsoluteTracking );
 
 	// Set the pose orientation to the hmd orientation with the offset applied.
-	pose.qRotation = hmd_orientation;
+	pose.qRotation = HmdQuaternion_Identity;
+	// pose.qRotation = hmd_orientation;
 
 	vr::HmdVector3_t offset_position = {
 		-0.15f + my_tracker_id_ * 0.15f, // translate our tracker depending on the id we were provided
-		0.1f,							// shift it up a little to make it more in view
+		0.7f,							// shift it up a little to make it more in view
 		-0.5f,							// put each controller 0.5m forward in front of the hmd so we can see it.
 	};
 
-	if (my_tracker_id_ == 1) {
+	BScan_Bone headBone = { 0 };
+	bscan_fetch_bone(BONE_HEAD, &headBone);
+	const vr::HmdVector3_t headBone_pos = PosFromBone(headBone);
+
+	// I don't think hmd is head position so just
+	// zeros here is wrong.
+	const vr::HmdVector3_t vr_headPos = { 0, 0, 0 };
+
+	if (my_tracker_id_ == 0) {
+		offset_position = vr_headPos;
+
+	} else if (my_tracker_id_ == 1) {
 		BScan_Bone bone = { 0 };
 		bscan_fetch_bone(BONE_TORSO, &bone);
-		memcpy(offset_position.v, bone.pos, sizeof(bone.pos));
+		const vr::HmdVector3_t bone_pos = PosFromBone(bone);
 
-        offset_position.v[2] = -1.0f;
+		offset_position = bone_pos - headBone_pos + vr_headPos;
+	}
+
+	BScan_Settings bscan_settings = {0};
+	bscan_get_settings(&bscan_settings);
+	if (bscan_settings.debugMode) {
+        offset_position.v[2] += -1.0f;
 	}
 
 	// Rotate our offset by the hmd quaternion (so the controllers are always facing towards us), and add then add the
 	// position of the hmd to put it into position.
+    // DriverLog("%f %f %f\n", hmd_position.v[0], hmd_position.v[1], hmd_position.v[2]);
 	const vr::HmdVector3_t position = hmd_position + ( offset_position * hmd_orientation );
 
 	// copy our position to our pose

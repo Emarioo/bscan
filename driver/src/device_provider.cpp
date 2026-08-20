@@ -13,7 +13,7 @@ vr::EVRInitError MyDeviceProvider::Init( vr::IVRDriverContext *pDriverContext )
 	// OpenVR provides a macro to do this for us.
 	VR_INIT_SERVER_DRIVER_CONTEXT( pDriverContext );
 
-	const unsigned int number_of_trackers = 2;
+	const unsigned int number_of_trackers = 3;
 	for ( unsigned int i = 0; i < number_of_trackers; i++ )
 	{
 

@@ -89,6 +89,24 @@ BScan_TrackerState* bscan_ipc_state() {
     return g_bscan_ipc_context.state;
 }
 
+bool bscan_get_settings(BScan_Settings* settings) {
+    BScan_TrackerState* state = bscan_ipc_state();
+    if (!state) {
+        return false;
+    }
+    
+    uint32_t a, b;
+    do {
+        a = state->sequence;
+
+        *settings = state->settings;
+
+        b = state->sequence;
+    } while (a != b || (a & 1)); // lock-free read
+
+    return true;
+}
+
 bool bscan_fetch_bone(BScan_BoneKind kind, BScan_Bone* bone) {
     BScan_TrackerState* state = bscan_ipc_state();
     if (!state) {
@@ -96,7 +114,6 @@ bool bscan_fetch_bone(BScan_BoneKind kind, BScan_Bone* bone) {
     }
 
     uint32_t a, b;
-
     do {
         a = state->sequence;
 
